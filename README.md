@@ -28,6 +28,10 @@ Browser (laptop)              Next.js on Netlify              Voltage Payments A
   │◄─ bolt11 + status (poll)    │                                │
 ```
 
+**Building this yourself?** [`docs/IMPLEMENTATION.md`](docs/IMPLEMENTATION.md) is a
+language-agnostic walkthrough — Voltage setup, Google OAuth setup, and every API call
+as a `curl`, with no reference to this repo's stack.
+
 ## Why this exists
 
 There is already a demo of this flow — `casino-checkout-oauth` — but it runs on Voltage's
