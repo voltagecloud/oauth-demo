@@ -51,29 +51,30 @@ a question with a filter attached.
 Step 4's metadata is what makes step 2 possible on the *next* deposit. If you
 forget it, the invoice is invisible to your own limit.
 
-### Who enforces what
+### All of this is your code
 
-Voltage has wallet policies of its own. They are not a substitute for the above,
-and knowing the difference saves an afternoon:
+There is nothing to switch on at Voltage, and no setting there that does any of
+this for you. **Voltage has no concept of your customers** — it sees an
+environment, a wallet, and payments. The identity being counted only exists in
+your application, so the rule that counts it has to live there too.
 
-| Limit | Enforced by | Scope |
-| --- | --- | --- |
-| Max size of a single payment | **Voltage** | The wallet — everyone |
-| Transactions per minute | **Voltage** | The wallet — everyone |
-| Deposits per customer per day | **You** | One identity |
-| Value per customer per day | **You** | One identity |
+What you use from the API is ordinary and public: create a payment with metadata,
+list payments filtered by that metadata. The limit itself is an `if` statement in
+your own backend.
 
-Voltage has no concept of *your* customers. It secures the wallet; anything
-per-person is yours to build. That is what this document is about.
+Voltage does have *wallet* policies — a ceiling on any single payment, a
+transactions-per-minute cap. Those are a different job: wallet-wide safety rails
+that apply to everybody equally and bound the damage when something else goes
+wrong. They are not per-customer, not per-day, and not a substitute for what
+follows. They are covered at the end, as an optional extra.
 
 ---
 
 ## Before you start
 
-You need four things. Steps 1–3 below get them.
+You need three things. Steps 1–2 below get them.
 
 - A Voltage organization, environment, wallet, and API key
-- Rate limiting enabled on your organization *(closed beta — see step 1)*
 - A Google OAuth client id and secret
 - Somewhere to run server-side code that can hold a secret
 
@@ -105,16 +106,7 @@ In the environment's settings, create an API key with **WRITE** access.
 > The secret is shown once. Store it in a secret manager. If you lose it, rotate
 > rather than hunt for it.
 
-### 1c. Ask Voltage to enable rate limiting
-
-Rate limiting is currently a **closed beta** and is not enabled by default.
-Contact Voltage and ask for it to be turned on for your organization before you
-build against it.
-
-<!-- TODO(voltage): replace with the exact feature name and the request channel
-     — support email, dashboard toggle, or account contact. -->
-
-### 1d. Check your credentials, and find your wallet's currency
+### 1c. Check your credentials, and find your wallet's currency
 
 Set these once; the rest of the document reuses them.
 
@@ -172,7 +164,7 @@ curl --fail-with-body -s \
 - Wallet-scoped endpoints are addressed by **organization + wallet**, not by
   environment. Payment endpoints are environment-scoped. They differ.
 
-### 1e. Units
+### 1d. Units
 
 Every amount in the API is in the currency's **smallest unit**:
 
@@ -618,10 +610,13 @@ include this payment automatically — there is nothing for you to write down.
 
 ---
 
-## Optional: Voltage's own wallet policies
+## Optional: wallet safety limits
 
-Worth setting as a backstop. These are wallet-wide and apply to everyone, so they
-complement your per-identity limits rather than replacing them.
+Unrelated to everything above, but worth setting. These are wallet-wide ceilings
+that apply to every payment regardless of who made it — a backstop for the case
+your own limit never sees, such as a bug in your code or a leaked API key. Your
+per-customer rule lives in your code, so a bug in that code bypasses it; these do
+not care.
 
 ```bash
 curl --fail-with-body -s -X PATCH \

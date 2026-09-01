@@ -171,20 +171,21 @@ reservations, not ignored. Counting only settled payments — which is what the 
 does — lets someone mint five invoices in parallel and pay them all at once, overshooting
 the cap they were checked against.
 
-## Two policy layers, and only one is yours
+## The limit is entirely your code
 
-The demo shows both side by side, because the distinction catches people out:
+There is nothing to enable at Voltage and no setting there that does this for you.
+Voltage has no concept of your customers — it sees an environment, a wallet, and
+payments. The identity being counted exists only in this app, so the rule counting it
+lives here too, in `lib/limits.ts`, in about 120 lines.
 
-| | Enforced by | Scope | Where |
-| --- | --- | --- | --- |
-| Max size of any single payment | **Voltage** | The wallet, everyone | `GET /organizations/{org}/wallets/{id}/policies` |
-| Transactions per minute | **Voltage** | The wallet, everyone | same |
-| Deposits per day | **You** | One Google account | `lib/limits.ts` |
-| Sats per day | **You** | One Google account | `lib/limits.ts` |
+What the API provides is ordinary: attach metadata to a payment, list payments filtered
+by it. That is enough, and it is the whole reason no database is needed.
 
-Voltage's wallet policies (`max_payment_size_sats`, `transactions_per_minute`,
-`send_volume_limit_sats`) are real and worth setting, but they are wallet-level brakes.
-Voltage has no concept of *your customers*, so anything per-identity is yours to build.
+Voltage does have *wallet* policies (`max_payment_size_sats`, `transactions_per_minute`,
+`send_volume_limit_sats`), and the demo displays them — but they are a different job.
+They are wallet-wide ceilings applying to everyone equally, a backstop for the case your
+own limit never sees, such as a bug in this code. They are not per-customer and not
+per-day.
 
 Note that the policies endpoint is addressed by organization **and wallet** — unlike the
 payments endpoints it is not environment-scoped. Easy to get wrong.

@@ -252,20 +252,21 @@ function Idle({
 }
 
 /**
- * Both enforcement layers, side by side.
+ * What Voltage does, next to what this app does.
  *
  * The distinction is the single most useful thing an integrator can take away:
- * Voltage polices the wallet, you police the customer, and only one of those is
- * something the API can do for you.
+ * the daily per-customer caps are not a Voltage feature and there is nothing to
+ * switch on. Voltage secures the wallet; counting customers is application code,
+ * because Voltage has no idea who they are.
  */
 function PolicyPanel({ limits }: { limits: LimitsResponse }) {
   const policy = limits.walletPolicy!;
 
   return (
-    <Panel label="Policy · two layers" tone="grape">
+    <Panel label="Policy" tone="grape">
       <dl className="space-y-3 font-mono text-[11px]">
         <div>
-          <dt className="pixel-text mb-1 text-[10px] text-cyan">Voltage enforces</dt>
+          <dt className="pixel-text mb-1 text-[10px] text-cyan">Wallet limits (Voltage)</dt>
           <dd className="space-y-0.5 text-bone/70">
             {policy.maxPaymentSizeSats !== undefined ? (
               <p className="flex justify-between">
@@ -280,14 +281,14 @@ function PolicyPanel({ limits }: { limits: LimitsResponse }) {
               </p>
             ) : null}
             <p className="pt-1 text-[10px] leading-relaxed text-bone/35">
-              Wallet-level, applies to everyone. Read from{" "}
-              <span className="text-bone/60">GET /wallets/{"{id}"}/policies</span>.
+              Wallet-wide ceilings, applying to everyone equally. Not per-customer.
+              Read from <span className="text-bone/60">GET /wallets/{"{id}"}/policies</span>.
             </p>
           </dd>
         </div>
 
         <div className="border-t border-bone/10 pt-3">
-          <dt className="pixel-text mb-1 text-[10px] text-banana">This app enforces</dt>
+          <dt className="pixel-text mb-1 text-[10px] text-banana">Daily caps (this app)</dt>
           <dd className="space-y-0.5 text-bone/70">
             <p className="flex justify-between">
               <span className="text-bone/45">wallet currency</span>
@@ -307,8 +308,9 @@ function PolicyPanel({ limits }: { limits: LimitsResponse }) {
               <span>{formatAmount(limits.usage.limits.amount, limits.currency)}</span>
             </p>
             <p className="pt-1 text-[10px] leading-relaxed text-bone/35">
-              Per Google account. Voltage has no concept of your customers, so this one is
-              yours to build — counted from the payment metadata.
+              Per Google account, enforced entirely in this app. Nothing to enable at
+              Voltage — it has no concept of your customers. Counted by querying its
+              payments by metadata.
             </p>
           </dd>
         </div>
