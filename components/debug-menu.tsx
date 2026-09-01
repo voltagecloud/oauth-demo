@@ -82,17 +82,25 @@ function Row({ entry, index }: { entry: TraceEntry; index: number }) {
 
 export function DebugMenu({ entries, onClear }: { entries: TraceEntry[]; onClear: () => void }) {
   const [open, setOpen] = useState(false);
+  const [following, setFollowing] = useState(true);
   const listRef = useRef<HTMLOListElement>(null);
   const previousCount = useRef(entries.length);
 
-  // Scroll new calls into view only when the panel is already open, so it never
-  // yanks the page around behind the player's back.
+  /**
+   * Follow new calls only while the reader is already at the bottom.
+   *
+   * Polling adds an entry every second or two, and an unconditional
+   * scroll-to-bottom makes the panel impossible to read or copy from: you
+   * scroll up to an error and it rips you back down before you can select it.
+   * This is the standard log-tail contract — scroll up to pin, return to the
+   * bottom to resume following.
+   */
   useEffect(() => {
-    if (open && entries.length > previousCount.current) {
+    if (open && following && entries.length > previousCount.current) {
       listRef.current?.scrollTo({ top: listRef.current.scrollHeight, behavior: "smooth" });
     }
     previousCount.current = entries.length;
-  }, [entries.length, open]);
+  }, [entries.length, open, following]);
 
   // Collapsed, this is a corner tab rather than a full-width bar: a fixed strip
   // across the bottom sits on top of whatever happens to be at the foot of the
@@ -113,6 +121,17 @@ export function DebugMenu({ entries, onClear }: { entries: TraceEntry[]; onClear
                 {entries.length} Voltage {entries.length === 1 ? "call" : "calls"}
               </span>
             </button>
+            {open && !following ? (
+              <button
+                onClick={() => {
+                  setFollowing(true);
+                  listRef.current?.scrollTo({ top: listRef.current.scrollHeight });
+                }}
+                className="pixel-text text-[10px] text-banana hover:text-bone"
+              >
+                Paused ▾
+              </button>
+            ) : null}
             {entries.length > 0 && open ? (
               <button
                 onClick={onClear}
@@ -130,7 +149,16 @@ export function DebugMenu({ entries, onClear }: { entries: TraceEntry[]; onClear
                 makes to voltageapi.com shows up here, verbatim.
               </p>
             ) : (
-              <ol ref={listRef} className="max-h-[46vh] overflow-y-auto font-mono text-[11px]">
+              <ol
+                ref={listRef}
+                onScroll={(event) => {
+                  const el = event.currentTarget;
+                  // A few pixels of slack: smooth scrolling rarely lands exactly.
+                  const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 24;
+                  setFollowing(atBottom);
+                }}
+                className="max-h-[46vh] overflow-y-auto font-mono text-[11px]"
+              >
                 {entries.map((entry, index) => (
                   <Row key={`${index}-${entry.path}-${entry.durationMs}`} entry={entry} index={index} />
                 ))}

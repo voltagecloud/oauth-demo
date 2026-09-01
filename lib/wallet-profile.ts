@@ -37,10 +37,10 @@ interface CacheEntry {
 // A wallet's currency does not change. This is only re-read so a corrected
 // misconfiguration takes effect without a redeploy.
 const TTL_MS = 5 * 60 * 1_000;
-let cache: CacheEntry | null = null;
+const cache = new Map<string, CacheEntry>();
 
 export function clearWalletProfileCache(): void {
-  cache = null;
+  cache.clear();
 }
 
 function asCurrency(value: string | undefined): WalletCurrency | undefined {
@@ -48,13 +48,27 @@ function asCurrency(value: string | undefined): WalletCurrency | undefined {
   return lower === "usd" || lower === "btc" ? lower : undefined;
 }
 
-export async function walletProfile(): Promise<WalletProfile> {
-  if (cache && cache.expiresAt > Date.now()) return cache.profile;
+/**
+ * Profiles a wallet. Defaults to the deposit wallet.
+ *
+ * The treasury wallet used by the autopay helper is profiled separately: it can
+ * be denominated differently from the wallet receiving deposits, and a USD
+ * wallet has to quote its *sends* as well as its receives.
+ */
+export async function walletProfile(walletIdOverride?: string): Promise<WalletProfile> {
+  const walletId = walletIdOverride ?? voltageConfig().walletId;
 
-  const { walletId } = voltageConfig();
-  const currencyOverride = optionalCurrency();
-  const networkOverride = optionalNetwork();
-  const locOverride = process.env.VOLTAGE_LINE_OF_CREDIT_ID || undefined;
+  const hit = cache.get(walletId);
+  if (hit && hit.expiresAt > Date.now()) return hit.profile;
+
+  // The env overrides describe the deposit wallet only; another wallet has to
+  // be taken as it is.
+  const isDepositWallet = walletId === voltageConfig().walletId;
+  const currencyOverride = isDepositWallet ? optionalCurrency() : undefined;
+  const networkOverride = isDepositWallet ? optionalNetwork() : undefined;
+  const locOverride = isDepositWallet
+    ? process.env.VOLTAGE_LINE_OF_CREDIT_ID || undefined
+    : undefined;
 
   let detected: Partial<WalletProfile> = {};
   try {
@@ -105,7 +119,7 @@ export async function walletProfile(): Promise<WalletProfile> {
     source: usedOverride ? (detected.currency ? "mixed" : "env") : "wallet",
   };
 
-  cache = { profile, expiresAt: Date.now() + TTL_MS };
+  cache.set(walletId, { profile, expiresAt: Date.now() + TTL_MS });
   return profile;
 }
 

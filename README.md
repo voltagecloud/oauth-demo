@@ -59,6 +59,13 @@ POST /payments                   { quote_id, amount: {currency:"usd", amount:100
 Quotes are single-use and short-lived, so one is minted per deposit and the invoice
 expiry is capped to the quote's remaining life. See `lib/voltage/quotes.ts`.
 
+**Sends need quoting too.** Paying an invoice *from* a USD wallet — which is what the
+autopay helper does — needs its own BTC→USD quote, because bitcoin is what leaves the
+wallet and the dollar cost has to be fixed first. The rail amount stays in BTC
+throughout so Voltage can check the quote and the payment agree exactly. The treasury
+wallet is profiled separately from the deposit wallet, since the two can be
+denominated differently and it is the *paying* wallet's currency that decides.
+
 **The accounting trap.** On a quoted receive, `requested_amount` is the converted
 **bitcoin rail** amount, while `data.amount` carries the USD cents the customer was
 actually asked for. Summing the wrong one compares msats against a dollar cap and

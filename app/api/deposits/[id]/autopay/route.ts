@@ -3,7 +3,9 @@ import { appTag, treasuryWalletId } from "@/lib/env";
 import { derivedUuid, isUuid } from "@/lib/ids";
 import { currentPlayer, playerId } from "@/lib/session";
 import { currentTrace } from "@/lib/trace";
-import { createSend, getPayment } from "@/lib/voltage/payments";
+import { btcRailMsats, createSend, getPayment } from "@/lib/voltage/payments";
+import { quoteFor } from "@/lib/voltage/quotes";
+import { quoteInputs, walletProfile } from "@/lib/wallet-profile";
 
 export const dynamic = "force-dynamic";
 
@@ -66,10 +68,44 @@ export async function POST(_request: Request, ctx: { params: Promise<{ id: strin
     // and Voltage rejects the duplicate instead of paying twice.
     const sendId = derivedUuid(`autopay:${payment.id}`);
 
+    // The treasury can be denominated differently from the deposit wallet, and
+    // it is the *paying* wallet's currency that decides whether a quote is
+    // needed. Bitcoin is what leaves either way, so the rail amount stays in
+    // msats throughout.
+    const treasuryProfile = await walletProfile(treasury);
+    const amountMsats = btcRailMsats(payment);
+
+    let quoteId: string | undefined;
+    if (treasuryProfile.currency === "usd") {
+      if (amountMsats === undefined) {
+        return apiError(
+          502,
+          "no_rail_amount",
+          "Voltage did not report a bitcoin amount for that invoice, so it cannot be quoted.",
+          {},
+          currentTrace(),
+        );
+      }
+
+      const { lineOfCreditId, network } = quoteInputs(treasuryProfile);
+      const quote = await quoteFor({
+        id: derivedUuid(`autopay-quote:${payment.id}`),
+        lineOfCreditId,
+        network,
+        amount: { currency: "btc", amount: amountMsats },
+        to: "usd",
+      });
+      quoteId = quote.id;
+    }
+
     await createSend({
       id: sendId,
       walletId: treasury,
       paymentRequest: payment.data.payment_request,
+      currency: treasuryProfile.currency,
+      quoteId,
+      // Submitted with the quote so Voltage can check the two agree exactly.
+      amountMsats: quoteId ? amountMsats : undefined,
       // Internal transfer: it should cost nothing, but leave headroom rather
       // than have the payment rejected over a 1 msat routing fee.
       maxFeeMsats: 1_000,

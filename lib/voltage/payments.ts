@@ -52,20 +52,41 @@ interface CreateSendParams {
   walletId: string;
   paymentRequest: string;
   maxFeeMsats: number;
+  /** The paying wallet's currency — not the invoice's. */
+  currency: WalletCurrency;
+  /** Required when paying from a USD wallet: the locked BTC→USD rate. */
+  quoteId?: string;
+  /**
+   * The invoice's exact amount on the bitcoin rail, in msats. Required
+   * alongside a quote so Voltage can check the two agree exactly.
+   */
+  amountMsats?: number;
   metadata?: Record<string, string>;
 }
 
-/** Pays a bolt11 invoice. Also `202`; poll for the terminal status. */
+/**
+ * Pays a bolt11 invoice. Also `202`; poll for the terminal status.
+ *
+ * A USD wallet has to quote its sends as well as its receives — bitcoin is what
+ * leaves the wallet, so the dollar cost has to be fixed first. The rail amount
+ * stays in BTC throughout so the quote and the payment can be compared for
+ * exact equality.
+ */
 export async function createSend(params: CreateSendParams): Promise<void> {
   await voltageRequest(`${envPath()}/payments`, {
     method: "POST",
     body: {
       id: params.id,
       wallet_id: params.walletId,
-      currency: "btc",
+      currency: params.currency,
       type: "bolt11",
+      quote_id: params.quoteId,
       data: {
         payment_request: params.paymentRequest,
+        amount:
+          params.amountMsats === undefined
+            ? undefined
+            : { currency: "btc", amount: params.amountMsats },
         max_fee: { currency: "btc", amount: params.maxFeeMsats },
       },
       metadata: params.metadata,
@@ -131,6 +152,21 @@ export async function listAllPayments(
   }
 
   return all;
+}
+
+/**
+ * The invoice's amount on the bitcoin rail, in msats — what actually moves over
+ * Lightning, whatever currency the wallet is denominated in.
+ *
+ * On a quoted (USD) receive this is `requested_amount`; on a bitcoin receive
+ * it is `data.amount`. Paying such an invoice from a USD wallet needs this
+ * exact number, both to quote against and to submit with the payment.
+ */
+export function btcRailMsats(payment: Payment): number | undefined {
+  for (const amount of [payment.requested_amount, payment.data?.amount]) {
+    if (amount && amount.currency === "btc") return amount.amount;
+  }
+  return undefined;
 }
 
 /**
