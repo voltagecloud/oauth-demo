@@ -1,0 +1,17 @@
+# Netlify auto-detects Next.js and installs @netlify/plugin-nextjs itself.
+# There is nothing to declare for the build beyond the Node version.
+[build]
+  command = "pnpm build"
+
+[build.environment]
+  NODE_VERSION = "22"
+
+# `pnpm dev` runs `netlify dev`, which needs to be told what to run underneath —
+# left to guess, it would call the `dev` script and recurse into itself. The
+# port is pinned off Next's default 3000 so a stray process there can't collide.
+[dev]
+  command = "pnpm dev:next"
+  targetPort = 3210
+  port = 8888
+  framework = "next"
+  autoLaunch = false
