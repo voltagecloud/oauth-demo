@@ -32,12 +32,14 @@ type Stage =
  */
 export function Cashier({
   limits,
+  limitsError,
   autopayAvailable,
   onRefreshLimits,
   onCredited,
   onClose,
 }: {
   limits: LimitsResponse | null;
+  limitsError: string | null;
   autopayAvailable: boolean;
   onRefreshLimits: () => void;
   onCredited: (sats: number) => void;
@@ -50,8 +52,11 @@ export function Cashier({
   const [autopaying, setAutopaying] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
 
-  const remainingSats = limits?.usage.remaining.sats ?? 0;
-  const remainingCount = limits?.usage.remaining.count ?? 0;
+  // Only meaningful once the allowance has actually been read. Defaulting an
+  // unknown allowance to zero is what makes a broken API key look like a
+  // policy denial, which is the most misleading thing this screen could say.
+  const remainingSats = limits?.usage.remaining.sats ?? null;
+  const remainingCount = limits?.usage.remaining.count ?? null;
 
   const submit = useCallback(async () => {
     setSubmitting(true);
@@ -164,11 +169,25 @@ export function Cashier({
         </div>
       ) : null}
 
+      {limitsError ? (
+        <div className="outline-chunk space-y-2 bg-blood/15 p-3">
+          <p className="pixel-text text-[11px] text-blood">Can&apos;t read your allowance</p>
+          <p className="text-xs text-bone/70">{limitsError}</p>
+          <p className="pixel-text text-[9px] leading-relaxed text-bone/40">
+            This is the Voltage API failing, not a limit. Open the debug menu for the
+            request and response.
+          </p>
+          <Button tone="ghost" onClick={onRefreshLimits}>
+            Retry
+          </Button>
+        </div>
+      ) : null}
+
       {notice ? (
         <p className="outline-chunk bg-tangerine/15 px-3 py-2 text-xs text-tangerine">{notice}</p>
       ) : null}
 
-      {stage.name === "choose" ? (
+      {stage.name === "choose" && !limitsError ? (
         <ChooseAmount
           amount={amount}
           setAmount={setAmount}
@@ -228,18 +247,20 @@ function ChooseAmount({
   amount: number;
   setAmount: (value: number) => void;
   bounds?: { minSats: number; maxSats: number };
-  remainingSats: number;
-  remainingCount: number;
+  /** null while the allowance is still unknown — not the same as zero. */
+  remainingSats: number | null;
+  remainingCount: number | null;
   submitting: boolean;
   onSubmit: () => void;
 }) {
-  const outOfDeposits = remainingCount <= 0;
+  const known = remainingCount !== null && remainingSats !== null;
+  const outOfDeposits = known && remainingCount <= 0;
 
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-2 gap-2">
         {PRESETS.map((preset) => {
-          const tooBig = preset > remainingSats;
+          const tooBig = remainingSats !== null && preset > remainingSats;
           const outOfRange = bounds ? preset < bounds.minSats || preset > bounds.maxSats : false;
           const disabled = tooBig || outOfRange || outOfDeposits;
 
@@ -252,7 +273,7 @@ function ChooseAmount({
                 outOfDeposits
                   ? "No deposits left today"
                   : tooBig
-                    ? `Only ${remainingSats.toLocaleString()} sats left today`
+                    ? `Only ${remainingSats?.toLocaleString()} sats left today`
                     : outOfRange
                       ? `Outside the ${bounds?.minSats}–${bounds?.maxSats} sat range`
                       : undefined
@@ -275,10 +296,16 @@ function ChooseAmount({
       <Button
         tone="lime"
         className="w-full"
-        disabled={submitting || outOfDeposits}
+        disabled={submitting || outOfDeposits || !known}
         onClick={onSubmit}
       >
-        {submitting ? "Asking the house…" : outOfDeposits ? "Limit reached" : "Get invoice"}
+        {submitting
+          ? "Asking the house…"
+          : !known
+            ? "Checking your allowance…"
+            : outOfDeposits
+              ? "Limit reached"
+              : "Get invoice"}
       </Button>
 
       {outOfDeposits ? (

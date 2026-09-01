@@ -35,6 +35,7 @@ export function GameShell() {
   const [autopayAvailable, setAutopayAvailable] = useState(false);
   const [sessionLoaded, setSessionLoaded] = useState(false);
   const [limits, setLimits] = useState<LimitsResponse | null>(null);
+  const [limitsError, setLimitsError] = useState<string | null>(null);
   const [credits, setCredits] = useState(0);
   const [screen, setScreen] = useState<Screen>("game");
   const [trace, setTrace] = useState<TraceEntry[]>([]);
@@ -62,8 +63,13 @@ export function GameShell() {
   const refreshLimits = useCallback(async () => {
     try {
       setLimits(await apiFetch<LimitsResponse>("/api/limits"));
-    } catch {
-      // Not fatal: the meters simply stay as they were.
+      setLimitsError(null);
+    } catch (cause) {
+      // Never swallow this. If the allowance cannot be read, the honest state
+      // is "unknown" — reporting it as zero remaining turns an outage into a
+      // convincing but entirely fictional policy denial.
+      setLimits(null);
+      setLimitsError(cause instanceof Error ? cause.message : "Could not reach the Voltage API.");
     }
   }, []);
 
@@ -186,6 +192,7 @@ export function GameShell() {
               ) : screen === "cashier" && player ? (
                 <Cashier
                   limits={limits}
+                  limitsError={limitsError}
                   autopayAvailable={autopayAvailable}
                   onRefreshLimits={refreshLimits}
                   onCredited={creditPlayer}

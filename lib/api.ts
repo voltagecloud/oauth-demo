@@ -22,13 +22,31 @@ export function apiError(
   return NextResponse.json({ error: { code, message, ...extra }, _trace: trace }, { status });
 }
 
+/**
+ * Voltage answers `missing_credentials` in the one case nobody guesses: a key
+ * issued for one host presented to the other. A staging key against production
+ * is not a 401 — it is a 400 saying the credential is missing, because as far
+ * as production is concerned that key does not exist. Worth spelling out.
+ */
+function explain(error: VoltageError): string {
+  if (error.type === "missing_credentials") {
+    return (
+      "Voltage rejected the API key. The usual cause is a key issued for the other " +
+      "host: a staging key must be used with VOLTAGE_API_BASE=https://staging.voltageapi.com/v1, " +
+      "and a production key with the default base URL. Also check the key has not been " +
+      "pasted with surrounding whitespace or quotes."
+    );
+  }
+  return error.detail ?? "The Voltage API rejected that request.";
+}
+
 function toErrorResponse(error: unknown, trace: TraceEntry[]): NextResponse {
   if (error instanceof VoltageError) {
     console.error("Voltage API error", error.status, error.type, error.detail);
     return apiError(
       error.status >= 500 ? 502 : error.status,
       error.type ?? "voltage_error",
-      error.detail ?? "The Voltage API rejected that request.",
+      explain(error),
       {},
       trace,
     );
