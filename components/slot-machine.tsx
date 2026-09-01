@@ -1,6 +1,13 @@
 "use client";
 
+import Image, { type StaticImageData } from "next/image";
 import { useCallback, useEffect, useRef, useState } from "react";
+import bananaSprite from "./symbols/banana.png";
+import gorillaSprite from "./symbols/gorilla.png";
+import monkeySprite from "./symbols/monkey.png";
+import parrotSprite from "./symbols/parrot.png";
+import snakeSprite from "./symbols/snake.png";
+import tigerSprite from "./symbols/tiger.png";
 
 /**
  * The game.
@@ -11,17 +18,29 @@ import { useCallback, useEffect, useRef, useState } from "react";
  * something ("you can't buy in again today") rather than as a bare API error.
  */
 
-const SYMBOLS = ["🐒", "🦜", "🐅", "🦍", "🐍", "🍌"] as const;
+const SYMBOLS = ["monkey", "parrot", "tiger", "gorilla", "snake", "banana"] as const;
 type ReelSymbol = (typeof SYMBOLS)[number];
+
+/** 32x32 sprites, drawn at whole multiples so the pixel grid stays square. */
+const SPRITES: Record<ReelSymbol, { src: StaticImageData; label: string }> = {
+  monkey: { src: monkeySprite, label: "Monkey" },
+  parrot: { src: parrotSprite, label: "Parrot" },
+  tiger: { src: tigerSprite, label: "Tiger" },
+  gorilla: { src: gorillaSprite, label: "Gorilla" },
+  snake: { src: snakeSprite, label: "Snake" },
+  banana: { src: bananaSprite, label: "Banana" },
+};
+
+const WILD: ReelSymbol = "banana";
 
 /** The banana is wild. Three of anything pays; the tiger pays most. */
 const PAYOUTS: Record<ReelSymbol, number> = {
-  "🍌": 40,
-  "🐅": 30,
-  "🦍": 20,
-  "🦜": 12,
-  "🐍": 10,
-  "🐒": 8,
+  banana: 40,
+  tiger: 30,
+  gorilla: 20,
+  parrot: 12,
+  snake: 10,
+  monkey: 8,
 };
 
 const SPIN_COST = 5;
@@ -41,16 +60,31 @@ function settle(reels: ReelSymbol[]): number {
   if (!a || !b || !c) return 0;
 
   // Bananas substitute for anything.
-  const nonWild = reels.filter((symbol) => symbol !== "🍌");
+  const nonWild = reels.filter((symbol) => symbol !== WILD);
   const distinct = new Set(nonWild);
 
   if (distinct.size <= 1) {
-    const symbol = nonWild[0] ?? "🍌";
+    const symbol = nonWild[0] ?? WILD;
     return PAYOUTS[symbol] * SPIN_COST;
   }
   // Two of a kind (wilds included) returns the stake.
   if (new Set(reels).size === 2) return SPIN_COST;
   return 0;
+}
+
+/**
+ * `unoptimized` because these are ~600-byte sprites: re-encoding them buys
+ * nothing and risks resampling art whose whole point is its exact pixel grid.
+ */
+function Sprite({ symbol, alt }: { symbol: ReelSymbol; alt: string }) {
+  return (
+    <Image
+      src={SPRITES[symbol].src}
+      alt={alt}
+      unoptimized
+      className="pixel-sprite size-16 sm:size-24"
+    />
+  );
 }
 
 export function SlotMachine({
@@ -64,7 +98,7 @@ export function SlotMachine({
   onWin: (amount: number) => void;
   onOutOfCredits: () => void;
 }) {
-  const [reels, setReels] = useState<ReelSymbol[]>(["🐒", "🦜", "🍌"]);
+  const [reels, setReels] = useState<ReelSymbol[]>(["monkey", "parrot", "banana"]);
   const [spinning, setSpinning] = useState<boolean[]>([false, false, false]);
   const [outcome, setOutcome] = useState<Outcome | null>(null);
   const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
@@ -109,22 +143,24 @@ export function SlotMachine({
             key={index}
             className="outline-chunk relative flex size-20 items-center justify-center overflow-hidden bg-bone sm:size-24"
           >
-            {spinning[index] ? (
-              <div className="animate-reel-spin flex flex-col">
-                {[...SYMBOLS, ...SYMBOLS].map((s, i) => (
-                  <span key={i} className="flex h-20 items-center justify-center text-4xl sm:h-24 sm:text-5xl">
-                    {s}
-                  </span>
-                ))}
-              </div>
-            ) : (
-              <span
-                key={`${index}-${symbol}`}
-                className="animate-reel-land text-4xl sm:text-5xl"
-                role="img"
-                aria-label={`Reel ${index + 1}`}
-              >
-                {symbol}
+            {/* Kept mounted rather than rendered only while spinning: that way
+                every sprite is fetched during the first paint, and the first
+                spin cannot open onto empty cells waiting on the network. */}
+            <div
+              hidden={!spinning[index]}
+              aria-hidden
+              className="animate-reel-spin flex flex-col"
+            >
+              {[...SYMBOLS, ...SYMBOLS].map((s, i) => (
+                <span key={i} className="flex h-20 items-center justify-center sm:h-24">
+                  <Sprite symbol={s} alt="" />
+                </span>
+              ))}
+            </div>
+
+            {!spinning[index] && (
+              <span key={`${index}-${symbol}`} className="animate-reel-land">
+                <Sprite symbol={symbol} alt={SPRITES[symbol].label} />
               </span>
             )}
           </div>
