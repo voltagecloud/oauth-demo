@@ -34,8 +34,7 @@ as a `curl`, with no reference to this repo's stack.
 
 ## Why this exists
 
-There is already a demo of this flow — `casino-checkout-oauth` — but it runs on Voltage's
-hosted checkout. The merchant app is 169 lines that create an "intent" and poll it; the
+There is already a demo of this flow, but it runs on Voltage's hosted checkout. The merchant app is 169 lines that create an "intent" and poll it; the
 Google exchange, the identity-to-policy binding, the daily counters and the invoice UI all
 live inside Voltage's own app, behind a `checkout_url`.
 
@@ -227,9 +226,10 @@ API key with WRITE access and note the organization, environment and wallet ids.
 `VOLTAGE_API_KEY`, `VOLTAGE_ORGANIZATION_ID`, `VOLTAGE_ENVIRONMENT_ID` and
 `VOLTAGE_WALLET_ID`.
 
-A staging key does **not** authenticate against production — it answers
-`missing_credentials`, not `401`. If your key is staging's, set
-`VOLTAGE_API_BASE=https://staging.voltageapi.com/v1`.
+An API key is bound to the host that issued it. Presenting one to a different host
+fails with `missing_credentials`, not `401` — which reads like a missing header
+rather than a mismatched key. If Voltage gave you a base URL other than the
+default, set `VOLTAGE_API_BASE` to it.
 
 **Google.** Create a Web application OAuth client at
 [console.cloud.google.com](https://console.cloud.google.com/apis/credentials) and add an
@@ -318,7 +318,7 @@ URI matching the deployed origin.
 
 - API docs: <https://docs.voltageapi.com>
 - OpenAPI spec: <https://voltageapi.com/v1/openapi/docs.json>
-- Base URL: `https://voltageapi.com/v1` (staging: `https://staging.voltageapi.com/v1`)
+- Base URL: `https://voltageapi.com/v1`
 - USD receive workflow: <https://docs.voltageapi.com/receiving>
 - Auth: `x-api-key: <key>`
 

@@ -165,10 +165,10 @@ curl --fail-with-body -s \
 
 **Two traps worth knowing now:**
 
-- A **staging key does not work against production.** It fails with
-  `missing_credentials` (HTTP 400), not `401`, which reads like the header is
-  missing rather than wrong. If your key is staging's, use
-  `https://staging.voltageapi.com/v1`.
+- **An API key is bound to the host that issued it.** Presenting one to a
+  different host fails with `missing_credentials` (HTTP 400), not `401` — which
+  reads like the header is missing rather than mismatched. If Voltage gave you a
+  base URL other than the default, use that one throughout.
 - Wallet-scoped endpoints are addressed by **organization + wallet**, not by
   environment. Payment endpoints are environment-scoped. They differ.
 
@@ -721,7 +721,7 @@ token, because that is exactly what it is.
 
 | Symptom | Cause |
 | --- | --- |
-| `missing_credentials` (400), not 401 | A staging key against production, or vice versa. Match the key to the host. |
+| `missing_credentials` (400), not 401 | The key belongs to a different host than the one you called. Match the key to its base URL. |
 | Limit is wrong by ~1000× | Mixed units. Cents and msats are both "10000" and neither errors. |
 | Amounts count wrong on a USD wallet | Read the field whose `currency` matches; do not assume `requested_amount` is bitcoin. |
 | `GET` 404s right after `POST` | Eventual consistency. Retry with backoff. |
@@ -739,7 +739,6 @@ token, because that is exactly what it is.
 | | |
 | --- | --- |
 | Base URL | `https://voltageapi.com/v1` |
-| Staging | `https://staging.voltageapi.com/v1` |
 | Auth header | `x-api-key: <key>` |
 | API reference | <https://voltageapi.com/v1/docs> |
 | OpenAPI spec | <https://voltageapi.com/v1/openapi/docs.json> |
