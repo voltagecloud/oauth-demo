@@ -9,6 +9,7 @@ import {
   ApiError,
   apiFetch,
   type Denial,
+  type DepositRow,
   type DepositView,
   type LimitsResponse,
   type WalletCurrency,
@@ -63,6 +64,13 @@ export function Cashier({
 
   // The first affordable preset, until the player picks one themselves.
   const selected = amount ?? presets.find((p) => remainingAmount === null || p <= remainingAmount) ?? presets[0] ?? null;
+
+  /** Reopens an invoice that was minted earlier and never paid. */
+  const resume = useCallback((row: { id: string; amount: number }) => {
+    setNotice(null);
+    setDeposit(null);
+    setStage({ name: "invoice", paymentId: row.id, amount: row.amount });
+  }, []);
 
   const submit = useCallback(async () => {
     setSubmitting(true);
@@ -194,6 +202,10 @@ export function Cashier({
         <p className="outline-chunk bg-tangerine/15 px-3 py-2 text-xs text-tangerine">{notice}</p>
       ) : null}
 
+      {stage.name === "choose" && !limitsError && limits?.outstanding?.length ? (
+        <Outstanding rows={limits.outstanding} currency={currency} onResume={resume} />
+      ) : null}
+
       {stage.name === "choose" && !limitsError ? (
         <ChooseAmount
           presets={presets}
@@ -243,6 +255,52 @@ export function Cashier({
           }}
         />
       ) : null}
+    </div>
+  );
+}
+
+/**
+ * Unpaid invoices, offered back.
+ *
+ * An unpaid invoice is held as a reservation against both daily caps, so
+ * without this a refresh strands it: the allowance is spoken for and there is
+ * no way to reach the invoice to pay it or wait it out. That is a fine way to
+ * lock yourself out of your own demo.
+ */
+function Outstanding({
+  rows,
+  currency,
+  onResume,
+}: {
+  rows: DepositRow[];
+  currency: WalletCurrency;
+  onResume: (row: DepositRow) => void;
+}) {
+  return (
+    <div className="outline-chunk bg-tangerine/10 p-3">
+      <p className="pixel-text mb-2 text-[10px] text-tangerine">
+        {rows.length} unpaid {rows.length === 1 ? "invoice" : "invoices"} holding your allowance
+      </p>
+      <ul className="space-y-1.5">
+        {rows.map((row) => (
+          <li key={row.id}>
+            <button
+              onClick={() => onResume(row)}
+              className="outline-chunk flex w-full items-center justify-between bg-panel-2 px-3 py-2 text-left hover:bg-panel-2/70"
+            >
+              <span className="pixel-text text-[11px] text-bone">
+                {formatAmount(row.amount, currency)}
+              </span>
+              <span className="pixel-text text-[9px] text-bone/45">
+                {new Date(row.createdAt).toLocaleTimeString()} · resume →
+              </span>
+            </button>
+          </li>
+        ))}
+      </ul>
+      <p className="pixel-text mt-2 text-[9px] leading-relaxed text-bone/35">
+        Pay one to free it, or let it expire — expired invoices stop counting.
+      </p>
     </div>
   );
 }

@@ -66,6 +66,26 @@ throughout so Voltage can check the quote and the payment agree exactly. The tre
 wallet is profiled separately from the deposit wallet, since the two can be
 denominated differently and it is the *paying* wallet's currency that decides.
 
+**Where the bitcoin amount comes from.** Not the payment record: on a USD wallet both
+`requested_amount` and `data.amount` are reported in *cents*, so there is no bitcoin
+figure to read. It comes from decoding the bolt11 itself, which is what the
+[Voltage docs](https://docs.voltageapi.com/sending-usd-line-of-credit) prescribe and
+is the right source anyway — the invoice is what the payer is actually charged, so it
+cannot disagree with what gets paid. See `lib/bolt11.ts`.
+
+## Unpaid invoices are recoverable
+
+An invoice that has been minted but not paid is held as a reservation against both
+daily caps — otherwise a player could mint invoices in parallel and settle them all
+at once, overshooting the cap they were checked against.
+
+That makes stranding one costly, and a page refresh used to do exactly that: the
+allowance was spoken for with no way back to the invoice to pay it. The cashier now
+lists outstanding invoices and lets you resume any of them. Failing that they expire
+(`INVOICE_EXPIRY_SECONDS`, default 15 minutes, capped by the quote's life on USD) and
+stop counting, since the ledger query only asks for `completed`, `receiving` and
+`generating`.
+
 **The accounting trap.** On a quoted receive, `requested_amount` is the converted
 **bitcoin rail** amount, while `data.amount` carries the USD cents the customer was
 actually asked for. Summing the wrong one compares msats against a dollar cap and

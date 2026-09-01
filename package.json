@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "@netlify/blobs": "^11.0.2",
+    "light-bolt11-decoder": "^3.2.0",
     "next": "16.3.4",
     "qrcode": "^1.5.4",
     "react": "19.2.8",

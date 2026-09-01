@@ -43,7 +43,16 @@ export interface Payment {
   data?: {
     /** The bolt11 invoice. Null until Voltage finishes generating it. */
     payment_request?: string | null;
+    /**
+     * On a cross-currency payment this is the *display* currency — cents on a
+     * USD wallet, not the bitcoin rail amount.
+     */
     amount?: Amount;
+    /**
+     * Deprecated by Voltage, but the deprecated msat/sat fields are documented
+     * to retain the bitcoin rail value where `amount` does not.
+     */
+    amount_msats?: number;
     memo?: string | null;
     expiration?: { expires_at?: string } | string | null;
   } | null;

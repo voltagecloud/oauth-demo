@@ -66,6 +66,18 @@ export async function GET(request: Request) {
           amount: paymentAmount(payment, usage.currency),
           createdAt: payment.created_at,
         })),
+        // Invoices that are minted, unpaid and still holding allowance. The UI
+        // offers these back: an unpaid invoice counts against the daily caps,
+        // so with no way to return to it after a refresh a player could lock
+        // up their whole allowance and have no way to spend or release it.
+        outstanding: usage.payments
+          .filter((payment) => payment.status === "receiving" || payment.status === "generating")
+          .map((payment) => ({
+            id: payment.id,
+            status: payment.status,
+            amount: paymentAmount(payment, usage.currency),
+            createdAt: payment.created_at,
+          })),
         bounds: { min: config.minDeposit, max: config.maxDeposit },
         // null when the API key lacks read access to wallet policies; the panel
         // says so rather than pretending there is no policy.

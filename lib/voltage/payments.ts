@@ -1,5 +1,6 @@
 import { voltageConfig } from "@/lib/env";
 import { voltageRequest } from "./client";
+import { invoiceMsats } from "@/lib/bolt11";
 import type { WalletCurrency } from "@/lib/money";
 import type { Payment, PaymentStatus, PaymentsPage } from "./types";
 
@@ -158,15 +159,22 @@ export async function listAllPayments(
  * The invoice's amount on the bitcoin rail, in msats — what actually moves over
  * Lightning, whatever currency the wallet is denominated in.
  *
- * On a quoted (USD) receive this is `requested_amount`; on a bitcoin receive
- * it is `data.amount`. Paying such an invoice from a USD wallet needs this
- * exact number, both to quote against and to submit with the payment.
+ * On a USD wallet neither `requested_amount` nor `data.amount` helps: both are
+ * reported in cents. The bitcoin figure lives in the deprecated `amount_msats`
+ * field, and failing that in the invoice itself, which is where the Voltage
+ * docs say to get it. The invoice is the last word — it is what the payer is
+ * actually charged.
  */
 export function btcRailMsats(payment: Payment): number | undefined {
+  const declared = payment.data?.amount_msats;
+  if (typeof declared === "number" && declared > 0) return declared;
+
   for (const amount of [payment.requested_amount, payment.data?.amount]) {
-    if (amount && amount.currency === "btc") return amount.amount;
+    if (amount && amount.currency === "btc" && amount.amount > 0) return amount.amount;
   }
-  return undefined;
+
+  const invoice = payment.data?.payment_request;
+  return invoice ? invoiceMsats(invoice) : undefined;
 }
 
 /**

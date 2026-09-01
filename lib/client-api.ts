@@ -46,6 +46,8 @@ export interface WalletPolicyView {
 export interface LimitsResponse {
   usage: UsageView;
   deposits: DepositRow[];
+  /** Minted but unpaid — still holding allowance, and resumable. */
+  outstanding: DepositRow[];
   bounds: { min: number; max: number };
   currency: WalletCurrency;
   /** Where the currency came from: detected from the wallet, or overridden. */
