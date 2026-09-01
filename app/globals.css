@@ -109,6 +109,12 @@
     text-transform: uppercase;
   }
 
+  /* Sprite art is 32x32 and drawn at 2x or 3x. Smoothing it would sand off
+     the one property that makes it read as 16-bit art in the first place. */
+  .pixel-sprite {
+    image-rendering: pixelated;
+  }
+
   /* CRT scanlines. Deliberately faint — at full strength they read as damage
      on light surfaces rather than as a phosphor grille, and they wreck the
      contrast of anything sitting underneath. */
