@@ -1,11 +1,12 @@
 import { z } from "zod";
 import { apiError, handle, json } from "@/lib/api";
 import { policyConfig, voltageConfig } from "@/lib/env";
+import { defaultPresets } from "@/lib/money";
 import { evaluate, readUsage } from "@/lib/limits";
 import { currentPlayer, playerId } from "@/lib/session";
 import { currentTrace } from "@/lib/trace";
 import { getWalletPolicies, summarisePolicies } from "@/lib/voltage/policies";
-import { paymentSats } from "@/lib/voltage/payments";
+import { paymentAmount } from "@/lib/voltage/payments";
 
 export const dynamic = "force-dynamic";
 
@@ -49,13 +50,17 @@ export async function GET(request: Request) {
           resetsAt: usage.resetsAt,
           window: config.window,
         },
+        currency: usage.currency,
+        // Served from the API so the client never has to know a currency's
+        // base unit or sensible denominations.
+        presets: defaultPresets(usage.currency),
         deposits: usage.payments.map((payment) => ({
           id: payment.id,
           status: payment.status,
-          sats: paymentSats(payment),
+          amount: paymentAmount(payment, usage.currency),
           createdAt: payment.created_at,
         })),
-        bounds: { minSats: config.minDepositSats, maxSats: config.maxDepositSats },
+        bounds: { min: config.minDeposit, max: config.maxDeposit },
         // null when the API key lacks read access to wallet policies; the panel
         // says so rather than pretending there is no policy.
         walletPolicy: policies ? summarisePolicies(policies) : null,

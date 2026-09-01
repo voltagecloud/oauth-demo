@@ -1,5 +1,6 @@
-import { appTag, policyConfig } from "@/lib/env";
-import { listAllPayments, paymentSats } from "@/lib/voltage/payments";
+import { appTag, policyConfig, walletCurrency } from "@/lib/env";
+import { formatAmount, type WalletCurrency } from "@/lib/money";
+import { listAllPayments, paymentAmount } from "@/lib/voltage/payments";
 import type { Payment } from "@/lib/voltage/types";
 
 /**
@@ -7,8 +8,8 @@ import type { Payment } from "@/lib/voltage/types";
  *
  * Voltage has wallet-level policies — a ceiling on any single payment, a
  * per-minute transaction velocity — but nothing per-customer: it has no idea
- * who your users are. "Seven deposits or ten thousand sats per Google account
- * per day" is therefore ours to enforce.
+ * who your users are. "Three deposits or $100 per Google account per day" is
+ * therefore ours to enforce.
  *
  * What it is *not* is ours to store. Every invoice is tagged at creation with
  * the player's id, and `GET /payments` filters on `metadata[key]=value`, so
@@ -18,7 +19,8 @@ import type { Payment } from "@/lib/voltage/types";
 
 export interface Tally {
   count: number;
-  sats: number;
+  /** Base units: cents for usd, msats for btc. */
+  amount: number;
 }
 
 export interface Usage {
@@ -26,8 +28,9 @@ export interface Usage {
   used: Tally;
   /** Invoices minted but not yet paid, held as reservations. */
   pending: Tally;
-  limits: { deposits: number; sats: number };
+  limits: { deposits: number; amount: number };
   remaining: Tally;
+  currency: WalletCurrency;
   windowStart: string;
   resetsAt: string;
   /** Newest first, for the on-screen history. */
@@ -65,7 +68,8 @@ export function windowBounds(): { start: Date; resetsAt: Date } {
  * let an invoice lapse should not lose a slot for the day.
  */
 export async function readUsage(playerId: string): Promise<Usage> {
-  const { maxDepositsPerDay, maxSatsPerDay } = policyConfig();
+  const { maxDepositsPerDay, maxAmountPerDay } = policyConfig();
+  const currency = walletCurrency();
   const { start, resetsAt } = windowBounds();
 
   const payments = await listAllPayments({
@@ -75,24 +79,25 @@ export async function readUsage(playerId: string): Promise<Usage> {
     startDate: start.toISOString(),
   });
 
-  const used: Tally = { count: 0, sats: 0 };
-  const pending: Tally = { count: 0, sats: 0 };
+  const used: Tally = { count: 0, amount: 0 };
+  const pending: Tally = { count: 0, amount: 0 };
 
   for (const payment of payments) {
     const bucket = payment.status === COMPLETED ? used : IN_FLIGHT.has(payment.status) ? pending : null;
     if (!bucket) continue;
     bucket.count += 1;
-    bucket.sats += paymentSats(payment);
+    bucket.amount += paymentAmount(payment, currency);
   }
 
   return {
     used,
     pending,
-    limits: { deposits: maxDepositsPerDay, sats: maxSatsPerDay },
+    limits: { deposits: maxDepositsPerDay, amount: maxAmountPerDay },
     remaining: {
       count: Math.max(0, maxDepositsPerDay - used.count - pending.count),
-      sats: Math.max(0, maxSatsPerDay - used.sats - pending.sats),
+      amount: Math.max(0, maxAmountPerDay - used.amount - pending.amount),
     },
+    currency,
     windowStart: start.toISOString(),
     resetsAt: resetsAt.toISOString(),
     payments,
@@ -106,11 +111,11 @@ export async function readUsage(playerId: string): Promise<Usage> {
  * counted settled payments, which let a player mint invoices in parallel and
  * overshoot the daily total by paying them all at once.
  */
-export function evaluate(usage: Usage, requestedSats: number): Denial | null {
-  const { minDepositSats, maxDepositSats } = policyConfig();
+export function evaluate(usage: Usage, requested: number): Denial | null {
+  const { minDeposit, maxDeposit } = policyConfig();
 
-  if (requestedSats < minDepositSats || requestedSats > maxDepositSats) {
-    return { kind: "range", min: minDepositSats, max: maxDepositSats, requested: requestedSats };
+  if (requested < minDeposit || requested > maxDeposit) {
+    return { kind: "range", min: minDeposit, max: maxDeposit, requested };
   }
 
   const usedCount = usage.used.count + usage.pending.count;
@@ -118,13 +123,13 @@ export function evaluate(usage: Usage, requestedSats: number): Denial | null {
     return { kind: "quantity", used: usedCount, limit: usage.limits.deposits, resetsAt: usage.resetsAt };
   }
 
-  const usedSats = usage.used.sats + usage.pending.sats;
-  if (usedSats + requestedSats > usage.limits.sats) {
+  const usedAmount = usage.used.amount + usage.pending.amount;
+  if (usedAmount + requested > usage.limits.amount) {
     return {
       kind: "amount",
-      used: usedSats,
-      limit: usage.limits.sats,
-      requested: requestedSats,
+      used: usedAmount,
+      limit: usage.limits.amount,
+      requested,
       resetsAt: usage.resetsAt,
     };
   }
@@ -132,13 +137,15 @@ export function evaluate(usage: Usage, requestedSats: number): Denial | null {
   return null;
 }
 
-export function denialMessage(denial: Denial): string {
+export function denialMessage(denial: Denial, currency: WalletCurrency): string {
+  const money = (value: number) => formatAmount(value, currency);
+
   switch (denial.kind) {
     case "range":
-      return `Deposits must be between ${denial.min.toLocaleString()} and ${denial.max.toLocaleString()} sats.`;
+      return `Deposits must be between ${money(denial.min)} and ${money(denial.max)}.`;
     case "quantity":
       return `Daily deposit limit reached — ${denial.used} of ${denial.limit} used.`;
     case "amount":
-      return `Daily amount limit reached — ${denial.used.toLocaleString()} of ${denial.limit.toLocaleString()} sats used, and this deposit is ${denial.requested.toLocaleString()}.`;
+      return `Daily amount limit reached — ${money(denial.used)} of ${money(denial.limit)} used, and this deposit is ${money(denial.requested)}.`;
   }
 }

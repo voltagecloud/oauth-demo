@@ -40,6 +40,48 @@ from your own backend and build your own frontend, a URL that does it all for yo
 reference. So this rebuild owns all of it: the OAuth flow, the policy engine, the invoice,
 the QR, the polling.
 
+## USD wallets need a quote
+
+Bitcoin is what actually moves over Lightning, so a USD-denominated wallet cannot
+put an amount in a bolt11 on its own — it needs a locked exchange rate first.
+`POST /payments` **rejects a USD receive without a `quote_id`**, which makes this a
+three-step flow rather than one call:
+
+```
+POST /quotes                     { amount: {currency:"usd", amount:1000}, to:"btc",
+                                   line_of_credit_id, network }   -> 202
+GET  /quotes/{id}   (poll)       until `quote` and `created_at` are set, and it is
+                                 unconsumed, unexpired, and not failed
+POST /payments                   { quote_id, amount: {currency:"usd", amount:1000},
+                                   payment_kind:"bolt11" }        -> 202
+```
+
+Quotes are single-use and short-lived, so one is minted per deposit and the invoice
+expiry is capped to the quote's remaining life. See `lib/voltage/quotes.ts`.
+
+**The accounting trap.** On a quoted receive, `requested_amount` is the converted
+**bitcoin rail** amount, while `data.amount` carries the USD cents the customer was
+actually asked for. Summing the wrong one compares msats against a dollar cap and
+produces a plausible, entirely wrong number — so `paymentAmount()` matches on
+currency and takes the field that agrees.
+
+Set `VOLTAGE_CURRENCY=btc` and none of this applies: the quote step is skipped and
+the invoice is minted directly.
+
+## Units
+
+Every amount in this app — configuration, ledger, caps — is in the wallet
+currency's **base unit**, exactly as the Voltage API takes and returns it:
+
+| `VOLTAGE_CURRENCY` | Base unit | `LIMIT_AMOUNT_PER_DAY=10000` means |
+| --- | --- | --- |
+| `usd` | cents | $100.00 |
+| `btc` | msats | 10 sats |
+
+One unit all the way through is what stops a dollar cap being compared against a
+bitcoin rail amount. Conversion happens once, at the edge, for display
+(`lib/money.ts`).
+
 ## The idea worth stealing: Voltage is the ledger
 
 Rate limiting per customer normally means a database — the reference implementation uses a
@@ -153,8 +195,13 @@ https://<your-site>.netlify.app/api/auth/google/callback
 Then set `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, and `AUTH_SECRET`
 (`openssl rand -base64 32`).
 
-**Limits.** `LIMIT_DEPOSITS_PER_DAY` and `LIMIT_SATS_PER_DAY` are the whole point — turn
-them down to something small to watch the denial fire.
+**Limits.** `LIMIT_DEPOSITS_PER_DAY` and `LIMIT_AMOUNT_PER_DAY` are the whole point —
+turn them down to something small to watch the denial fire. Neither has a default:
+the app refuses to serve rather than invent a number, because a default standing in
+for missing configuration looks exactly like a real policy on screen.
+
+**USD wallets** additionally need `VOLTAGE_CURRENCY=usd`, `VOLTAGE_LINE_OF_CREDIT_ID`
+and `VOLTAGE_NETWORK` (e.g. `mutinynet`).
 
 ## Running it
 
@@ -193,7 +240,8 @@ URI matching the deployed origin.
 
 | Path | What's there |
 | --- | --- |
-| `lib/voltage/` | API client, payments, wallet policies, a hand-written schema subset |
+| `lib/voltage/` | API client, payments, quotes, wallet policies, a hand-written schema subset |
+| `lib/money.ts` | Base units, currency-aware formatting, default presets |
 | `lib/limits.ts` | The policy engine — reads the ledger, decides, explains itself |
 | `lib/google.ts` | OAuth: authorize URL, PKCE, code exchange, id_token claims |
 | `lib/handoff.ts` | Cross-device sign-in records in Netlify Blobs |
@@ -205,7 +253,7 @@ URI matching the deployed origin.
 ## Known limitations
 
 - The game is decorative. Credits are local state and no payout is real; the only money
-  that moves is the deposit.
+  that moves is the deposit. One credit is one base unit, so $5.00 buys 500 credits.
 - Limits are keyed on the Google subject, so a second Google account is a second allowance.
   That is the honest bound of "sign in to prove you're a person" and worth being clear
   about — it is a rate limit, not an identity check.
@@ -221,6 +269,7 @@ URI matching the deployed origin.
 - API docs: <https://docs.voltageapi.com>
 - OpenAPI spec: <https://voltageapi.com/v1/openapi/docs.json>
 - Base URL: `https://voltageapi.com/v1` (staging: `https://staging.voltageapi.com/v1`)
+- USD receive workflow: <https://docs.voltageapi.com/receiving>
 - Auth: `x-api-key: <key>`
 
 Test sats are worth nothing. Play responsibly.

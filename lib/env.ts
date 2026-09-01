@@ -6,6 +6,8 @@
  * crashing the build or every route at import time.
  */
 
+import type { WalletCurrency } from "@/lib/money";
+
 function required(name: string): string {
   const value = process.env[name];
   if (!value) throw new Error(`Missing required environment variable: ${name}`);
@@ -36,6 +38,36 @@ export function voltageConfig() {
   };
 }
 
+/**
+ * The currency the receiving wallet is denominated in.
+ *
+ * This is not cosmetic. A USD wallet cannot mint an invoice without a
+ * conversion quote, and it reports its amounts in a different field than a
+ * bitcoin wallet does, so getting it wrong produces confidently wrong numbers
+ * rather than an error.
+ */
+export function walletCurrency(): WalletCurrency {
+  const raw = process.env.VOLTAGE_CURRENCY ?? "btc";
+  if (raw !== "btc" && raw !== "usd") {
+    throw new Error(`VOLTAGE_CURRENCY must be "btc" or "usd", got: ${raw}`);
+  }
+  return raw;
+}
+
+/**
+ * Extra configuration a USD wallet needs, because every receive has to be
+ * quoted first. Required only in USD mode, so a bitcoin deployment never has
+ * to know these exist.
+ */
+export function quoteConfig() {
+  const network = required("VOLTAGE_NETWORK");
+  const allowed = ["mainnet", "testnet", "signet", "mutinynet", "none"];
+  if (!allowed.includes(network)) {
+    throw new Error(`VOLTAGE_NETWORK must be one of ${allowed.join(", ")}, got: ${network}`);
+  }
+  return { lineOfCreditId: required("VOLTAGE_LINE_OF_CREDIT_ID"), network };
+}
+
 /** Present only when the autopay demo helper is configured. */
 export function treasuryWalletId(): string | undefined {
   return optional("VOLTAGE_TREASURY_WALLET_ID");
@@ -54,17 +86,41 @@ export function authSecret(): string {
 
 export type LimitWindow = "utc_day" | "rolling";
 
+/** Like `integer`, but with no default — an unset limit must not be guessed. */
+function requiredInteger(name: string): number {
+  const parsed = Number.parseInt(required(name), 10);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    throw new Error(`Environment variable ${name} must be a positive integer`);
+  }
+  return parsed;
+}
+
+/**
+ * The deposit policy. All amounts are in the wallet currency's base unit —
+ * cents for USD, msats for bitcoin — matching what the Voltage API itself
+ * takes and returns.
+ *
+ * The two caps are deliberately **required**. They are the entire point of the
+ * demo, and a default that silently stands in for missing configuration is
+ * indistinguishable from a real policy on screen: you end up debugging the
+ * wrong system. Better to refuse to serve than to invent a number.
+ */
 export function policyConfig() {
   const raw = process.env.LIMIT_WINDOW ?? "utc_day";
   if (raw !== "utc_day" && raw !== "rolling") {
     throw new Error(`LIMIT_WINDOW must be "utc_day" or "rolling", got: ${raw}`);
   }
+
+  const currency = walletCurrency();
+  const [fallbackMin, fallbackMax] =
+    currency === "usd" ? [100, 5_000] : [100_000, 5_000_000];
+
   return {
-    maxDepositsPerDay: integer("LIMIT_DEPOSITS_PER_DAY", 7),
-    maxSatsPerDay: integer("LIMIT_SATS_PER_DAY", 10_000),
+    maxDepositsPerDay: requiredInteger("LIMIT_DEPOSITS_PER_DAY"),
+    maxAmountPerDay: requiredInteger("LIMIT_AMOUNT_PER_DAY"),
     window: raw as LimitWindow,
-    minDepositSats: integer("MIN_DEPOSIT_SATS", 100),
-    maxDepositSats: integer("MAX_DEPOSIT_SATS", 5_000),
+    minDeposit: integer("MIN_DEPOSIT_AMOUNT", fallbackMin),
+    maxDeposit: integer("MAX_DEPOSIT_AMOUNT", fallbackMax),
     invoiceExpirySeconds: integer("INVOICE_EXPIRY_SECONDS", 900),
   };
 }

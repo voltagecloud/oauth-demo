@@ -1,9 +1,9 @@
 import { apiError, handle, json } from "@/lib/api";
-import { appTag } from "@/lib/env";
+import { appTag, walletCurrency } from "@/lib/env";
 import { isUuid } from "@/lib/ids";
 import { currentPlayer, playerId } from "@/lib/session";
 import { currentTrace } from "@/lib/trace";
-import { getPayment, paymentSats } from "@/lib/voltage/payments";
+import { getPayment, paymentAmount } from "@/lib/voltage/payments";
 import { VoltageError } from "@/lib/voltage/client";
 
 export const dynamic = "force-dynamic";
@@ -32,7 +32,7 @@ export async function GET(_request: Request, ctx: { params: Promise<{ id: string
       // Reads are eventually consistent: a GET right after the 202 can 404 for
       // a moment. That is "not ready", not "gone".
       if (error instanceof VoltageError && error.isNotFound) {
-        return json({ status: "generating", bolt11: null, sats: null }, currentTrace());
+        return json({ status: "generating", bolt11: null, amount: null }, currentTrace());
       }
       throw error;
     }
@@ -50,7 +50,8 @@ export async function GET(_request: Request, ctx: { params: Promise<{ id: string
         id: payment.id,
         status: payment.status,
         bolt11: payment.data?.payment_request ?? null,
-        sats: paymentSats(payment),
+        amount: paymentAmount(payment, walletCurrency()),
+        currency: walletCurrency(),
         createdAt: payment.created_at,
         updatedAt: payment.updated_at,
       },

@@ -1,5 +1,6 @@
 import { voltageConfig } from "@/lib/env";
 import { voltageRequest } from "./client";
+import type { WalletCurrency } from "@/lib/money";
 import type { Payment, PaymentStatus, PaymentsPage } from "./types";
 
 function envPath(): string {
@@ -11,7 +12,11 @@ interface CreateReceiveParams {
   /** Client-generated UUID. Voltage also treats it as the idempotency key. */
   id: string;
   walletId: string;
-  amountMsats: number;
+  /** Base units: msats for btc, cents for usd. */
+  amount: number;
+  currency: WalletCurrency;
+  /** Required for USD wallets — the locked conversion rate. */
+  quoteId?: string;
   description?: string;
   /** Seconds. Voltage default is 3600, max 86400. */
   expirySeconds?: number;
@@ -32,7 +37,9 @@ export async function createReceive(params: CreateReceiveParams): Promise<void> 
       id: params.id,
       wallet_id: params.walletId,
       payment_kind: "bolt11",
-      amount: { currency: "btc", amount: params.amountMsats },
+      amount: { currency: params.currency, amount: params.amount },
+      // Omitted entirely for btc; mandatory for usd.
+      quote_id: params.quoteId,
       description: params.description,
       expiration: params.expirySeconds,
       metadata: params.metadata,
@@ -126,9 +133,20 @@ export async function listAllPayments(
   return all;
 }
 
-/** Sats an invoice was minted for, preferring the non-deprecated fields. */
-export function paymentSats(payment: Payment): number {
-  const amount = payment.requested_amount ?? payment.data?.amount;
-  if (!amount || amount.currency !== "btc") return 0;
-  return Math.round(amount.amount / 1_000);
+/**
+ * What an invoice was minted for, in the wallet currency's base unit.
+ *
+ * The field to read depends on the currency, and getting it backwards is
+ * silent rather than loud. On a *quoted* (USD) receive, `requested_amount` is
+ * the converted **bitcoin rail** amount, while `data.amount` carries the USD
+ * cents the customer was actually asked for. Summing `requested_amount` against
+ * a dollar cap would compare msats to cents and produce a plausible, wrong
+ * number — so match on currency and take the field that agrees.
+ */
+export function paymentAmount(payment: Payment, currency: WalletCurrency): number {
+  const candidates = [payment.data?.amount, payment.requested_amount];
+  for (const amount of candidates) {
+    if (amount && amount.currency === currency) return amount.amount;
+  }
+  return 0;
 }

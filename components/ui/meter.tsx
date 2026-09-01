@@ -12,6 +12,8 @@ export function Meter({
   limit,
   segments,
   tone,
+  /** Renders a raw value for display; identity for plain counts. */
+  format = (value: number) => value.toLocaleString(),
   suffix = "",
 }: {
   label: string;
@@ -20,6 +22,7 @@ export function Meter({
   limit: number;
   segments: number;
   tone: "banana" | "cyan";
+  format?: (value: number) => string;
   suffix?: string;
 }) {
   const perSegment = limit / segments;
@@ -34,8 +37,8 @@ export function Meter({
       <div className="pixel-text mb-1.5 flex items-baseline justify-between text-[10px] text-bone/70">
         <span>{label}</span>
         <span className="text-bone">
-          {total.toLocaleString()}
-          <span className="text-bone/50"> / {limit.toLocaleString()}{suffix}</span>
+          {format(total)}
+          <span className="text-bone/50"> / {format(limit)}{suffix}</span>
         </span>
       </div>
       <div className="outline-chunk flex gap-[3px] bg-ink p-[3px]">
@@ -55,7 +58,7 @@ export function Meter({
       </div>
       {pending > 0 ? (
         <p className="pixel-text mt-1 text-[9px] text-bone/45">
-          {pending.toLocaleString()}{suffix} held by unpaid invoices
+          {format(pending)}{suffix} held by unpaid invoices
         </p>
       ) : null}
     </div>

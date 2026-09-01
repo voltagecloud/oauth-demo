@@ -10,6 +10,7 @@ import { SlotMachine } from "@/components/slot-machine";
 import { Button } from "@/components/ui/button";
 import { Panel } from "@/components/ui/panel";
 import { apiFetch, setTraceSink, type LimitsResponse, type PlayerView } from "@/lib/client-api";
+import { formatAmount, unitLabel } from "@/lib/money";
 import type { TraceEntry } from "@/lib/trace";
 
 const MARQUEE = [
@@ -233,7 +234,7 @@ function Idle({
           {limits ? (
             <p className="pixel-text text-[10px] text-bone/45">
               {limits.usage.remaining.count} of {limits.usage.limits.deposits} deposits left ·{" "}
-              {limits.usage.remaining.sats.toLocaleString()} sats
+              {formatAmount(limits.usage.remaining.amount, limits.currency)}
             </p>
           ) : null}
         </>
@@ -293,8 +294,8 @@ function PolicyPanel({ limits }: { limits: LimitsResponse }) {
               <span>{limits.usage.limits.deposits}</span>
             </p>
             <p className="flex justify-between">
-              <span className="text-bone/45">sats / day</span>
-              <span>{limits.usage.limits.sats.toLocaleString()}</span>
+              <span className="text-bone/45">{unitLabel(limits.currency)} / day</span>
+              <span>{formatAmount(limits.usage.limits.amount, limits.currency)}</span>
             </p>
             <p className="pt-1 text-[10px] leading-relaxed text-bone/35">
               Per Google account. Voltage has no concept of your customers, so this one is

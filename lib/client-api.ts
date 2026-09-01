@@ -11,16 +11,19 @@ export interface PlayerView {
   picture?: string;
 }
 
+export type WalletCurrency = "btc" | "usd";
+
 export interface Tally {
   count: number;
-  sats: number;
+  /** Base units: cents for usd, msats for btc. */
+  amount: number;
 }
 
 export interface UsageView {
   used: Tally;
   pending: Tally;
   remaining: Tally;
-  limits: { deposits: number; sats: number };
+  limits: { deposits: number; amount: number };
   windowStart: string;
   resetsAt: string;
   window: "utc_day" | "rolling";
@@ -29,7 +32,7 @@ export interface UsageView {
 export interface DepositRow {
   id: string;
   status: string;
-  sats: number;
+  amount: number;
   createdAt: string;
 }
 
@@ -43,7 +46,10 @@ export interface WalletPolicyView {
 export interface LimitsResponse {
   usage: UsageView;
   deposits: DepositRow[];
-  bounds: { minSats: number; maxSats: number };
+  bounds: { min: number; max: number };
+  currency: WalletCurrency;
+  /** Deposit button denominations, in base units, chosen server-side. */
+  presets: number[];
   walletPolicy: WalletPolicyView | null;
 }
 
@@ -51,7 +57,8 @@ export interface DepositView {
   id: string;
   status: string;
   bolt11: string | null;
-  sats: number | null;
+  amount: number | null;
+  currency?: WalletCurrency;
 }
 
 export type Denial =
