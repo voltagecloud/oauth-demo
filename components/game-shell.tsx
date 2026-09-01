@@ -290,6 +290,15 @@ function PolicyPanel({ limits }: { limits: LimitsResponse }) {
           <dt className="pixel-text mb-1 text-[10px] text-banana">This app enforces</dt>
           <dd className="space-y-0.5 text-bone/70">
             <p className="flex justify-between">
+              <span className="text-bone/45">wallet currency</span>
+              <span className="uppercase">
+                {limits.currency}
+                <span className="ml-1 text-bone/35 lowercase">
+                  {limits.currencySource === "wallet" ? "(detected)" : "(from env)"}
+                </span>
+              </span>
+            </p>
+            <p className="flex justify-between">
               <span className="text-bone/45">deposits / day</span>
               <span>{limits.usage.limits.deposits}</span>
             </p>

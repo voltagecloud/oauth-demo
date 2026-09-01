@@ -1,4 +1,4 @@
-import { appTag, policyConfig, walletCurrency } from "@/lib/env";
+import { appTag, policyConfig } from "@/lib/env";
 import { formatAmount, type WalletCurrency } from "@/lib/money";
 import { listAllPayments, paymentAmount } from "@/lib/voltage/payments";
 import type { Payment } from "@/lib/voltage/types";
@@ -47,8 +47,7 @@ const COMPLETED = "completed";
 const IN_FLIGHT = new Set(["generating", "receiving"]);
 
 /** Start of the counting window, and when it next resets. */
-export function windowBounds(): { start: Date; resetsAt: Date } {
-  const { window } = policyConfig();
+export function windowBounds(window: "utc_day" | "rolling"): { start: Date; resetsAt: Date } {
   const now = new Date();
 
   if (window === "rolling") {
@@ -67,10 +66,9 @@ export function windowBounds(): { start: Date; resetsAt: Date } {
  * count. `expired` and `failed` invoices are excluded outright — a player who
  * let an invoice lapse should not lose a slot for the day.
  */
-export async function readUsage(playerId: string): Promise<Usage> {
-  const { maxDepositsPerDay, maxAmountPerDay } = policyConfig();
-  const currency = walletCurrency();
-  const { start, resetsAt } = windowBounds();
+export async function readUsage(playerId: string, currency: WalletCurrency): Promise<Usage> {
+  const { maxDepositsPerDay, maxAmountPerDay, window } = policyConfig(currency);
+  const { start, resetsAt } = windowBounds(window);
 
   const payments = await listAllPayments({
     direction: "receive",
@@ -112,7 +110,7 @@ export async function readUsage(playerId: string): Promise<Usage> {
  * overshoot the daily total by paying them all at once.
  */
 export function evaluate(usage: Usage, requested: number): Denial | null {
-  const { minDeposit, maxDeposit } = policyConfig();
+  const { minDeposit, maxDeposit } = policyConfig(usage.currency);
 
   if (requested < minDeposit || requested > maxDeposit) {
     return { kind: "range", min: minDeposit, max: maxDeposit, requested };

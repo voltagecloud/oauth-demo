@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { apiError, handle, json } from "@/lib/api";
 import { policyConfig, voltageConfig } from "@/lib/env";
+import { walletProfile } from "@/lib/wallet-profile";
 import { defaultPresets } from "@/lib/money";
 import { evaluate, readUsage } from "@/lib/limits";
 import { currentPlayer, playerId } from "@/lib/session";
@@ -31,11 +32,12 @@ export async function GET(request: Request) {
     const probeAmount = parsed.success ? parsed.data.amount : undefined;
 
     const { walletId } = voltageConfig();
-    const config = policyConfig();
+    const profile = await walletProfile();
+    const config = policyConfig(profile.currency);
 
     // Independent reads; no reason to serialise them.
     const [usage, policies] = await Promise.all([
-      readUsage(playerId(player)),
+      readUsage(playerId(player), profile.currency),
       getWalletPolicies(walletId).catch(() => null),
     ]);
 
@@ -51,6 +53,10 @@ export async function GET(request: Request) {
           window: config.window,
         },
         currency: usage.currency,
+        // Surfaced so a currency mismatch is visible on screen rather than
+        // showing up as a wrong-by-1000 number nobody questions.
+        currencySource: profile.source,
+        network: profile.network,
         // Served from the API so the client never has to know a currency's
         // base unit or sensible denominations.
         presets: defaultPresets(usage.currency),

@@ -65,18 +65,30 @@ actually asked for. Summing the wrong one compares msats against a dollar cap an
 produces a plausible, entirely wrong number — so `paymentAmount()` matches on
 currency and takes the field that agrees.
 
-Set `VOLTAGE_CURRENCY=btc` and none of this applies: the quote step is skipped and
-the invoice is minted directly.
+None of this applies to a bitcoin wallet: the quote step is skipped and the invoice
+is minted directly.
+
+**You do not configure any of it.** The wallet's currency, network and line of credit
+all come from `GET /organizations/{org}/wallets/{id}` — `balances[].currency` says
+what it holds — so the app asks rather than making you restate it
+(`lib/wallet-profile.ts`, cached for five minutes). `VOLTAGE_CURRENCY`,
+`VOLTAGE_NETWORK` and `VOLTAGE_LINE_OF_CREDIT_ID` remain as overrides for a key that
+cannot read wallets.
+
+That is not just convenience. A currency the operator has to restate is a currency
+they can get wrong, and getting it wrong is silent: a USD wallet read as bitcoin
+renders $100.00 as "10 sats" and skips the quote its invoices depend on. The policy
+panel now shows the detected currency and whether it was detected or overridden.
 
 ## Units
 
 Every amount in this app — configuration, ledger, caps — is in the wallet
 currency's **base unit**, exactly as the Voltage API takes and returns it:
 
-| `VOLTAGE_CURRENCY` | Base unit | `LIMIT_AMOUNT_PER_DAY=10000` means |
+| Wallet currency | Base unit | `LIMIT_AMOUNT_PER_DAY=10000` means |
 | --- | --- | --- |
-| `usd` | cents | $100.00 |
-| `btc` | msats | 10 sats |
+| USD | cents | $100.00 |
+| BTC | msats | 10 sats |
 
 One unit all the way through is what stops a dollar cap being compared against a
 bitcoin rail amount. Conversion happens once, at the edge, for display
@@ -200,8 +212,9 @@ turn them down to something small to watch the denial fire. Neither has a defaul
 the app refuses to serve rather than invent a number, because a default standing in
 for missing configuration looks exactly like a real policy on screen.
 
-**USD wallets** additionally need `VOLTAGE_CURRENCY=usd`, `VOLTAGE_LINE_OF_CREDIT_ID`
-and `VOLTAGE_NETWORK` (e.g. `mutinynet`).
+**USD wallets** need no extra configuration — the currency, network and line of
+credit are read from the wallet. The API key does need wallet read access for that;
+without it, set `VOLTAGE_CURRENCY` (and `VOLTAGE_LINE_OF_CREDIT_ID` for USD) by hand.
 
 ## Running it
 
@@ -242,6 +255,7 @@ URI matching the deployed origin.
 | --- | --- |
 | `lib/voltage/` | API client, payments, quotes, wallet policies, a hand-written schema subset |
 | `lib/money.ts` | Base units, currency-aware formatting, default presets |
+| `lib/wallet-profile.ts` | Reads the wallet's currency, network and line of credit |
 | `lib/limits.ts` | The policy engine — reads the ledger, decides, explains itself |
 | `lib/google.ts` | OAuth: authorize URL, PKCE, code exchange, id_token claims |
 | `lib/handoff.ts` | Cross-device sign-in records in Netlify Blobs |

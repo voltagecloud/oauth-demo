@@ -1,5 +1,6 @@
 import { apiError, handle, json } from "@/lib/api";
-import { appTag, walletCurrency } from "@/lib/env";
+import { appTag } from "@/lib/env";
+import { walletProfile } from "@/lib/wallet-profile";
 import { isUuid } from "@/lib/ids";
 import { currentPlayer, playerId } from "@/lib/session";
 import { currentTrace } from "@/lib/trace";
@@ -24,6 +25,8 @@ export async function GET(_request: Request, ctx: { params: Promise<{ id: string
     if (!isUuid(id)) {
       return apiError(400, "invalid_id", "That is not a payment id.", {}, currentTrace());
     }
+
+    const { currency } = await walletProfile();
 
     let payment;
     try {
@@ -50,8 +53,8 @@ export async function GET(_request: Request, ctx: { params: Promise<{ id: string
         id: payment.id,
         status: payment.status,
         bolt11: payment.data?.payment_request ?? null,
-        amount: paymentAmount(payment, walletCurrency()),
-        currency: walletCurrency(),
+        amount: paymentAmount(payment, currency),
+        currency,
         createdAt: payment.created_at,
         updatedAt: payment.updated_at,
       },

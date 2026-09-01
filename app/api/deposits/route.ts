@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { apiError, handle, json } from "@/lib/api";
-import { appTag, policyConfig, quoteConfig, voltageConfig, walletCurrency } from "@/lib/env";
+import { appTag, policyConfig, voltageConfig } from "@/lib/env";
+import { quoteInputs, walletProfile } from "@/lib/wallet-profile";
 import { denialMessage, evaluate, readUsage } from "@/lib/limits";
 import { randomUUID } from "@/lib/ids";
 import { currentPlayer, playerId } from "@/lib/session";
@@ -38,10 +39,11 @@ export async function POST(request: Request) {
     }
 
     const { amount } = parsed.data;
-    const currency = walletCurrency();
+    const profile = await walletProfile();
+    const currency = profile.currency;
     const id = playerId(player);
 
-    const usage = await readUsage(id);
+    const usage = await readUsage(id, currency);
     const denial = evaluate(usage, amount);
     if (denial) {
       if (denial.kind === "range") {
@@ -81,7 +83,7 @@ export async function POST(request: Request) {
     }
 
     const { walletId } = voltageConfig();
-    const { invoiceExpirySeconds } = policyConfig();
+    const { invoiceExpirySeconds } = policyConfig(currency);
     const paymentId = randomUUID();
 
     // A USD wallet has to lock an exchange rate before it can put an amount in
@@ -91,7 +93,7 @@ export async function POST(request: Request) {
     let expiry = invoiceExpirySeconds;
 
     if (currency === "usd") {
-      const { lineOfCreditId, network } = quoteConfig();
+      const { lineOfCreditId, network } = quoteInputs(profile);
       const quote = await quoteFor({
         id: randomUUID(),
         lineOfCreditId,

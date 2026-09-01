@@ -39,33 +39,31 @@ export function voltageConfig() {
 }
 
 /**
- * The currency the receiving wallet is denominated in.
+ * An explicit currency override.
  *
- * This is not cosmetic. A USD wallet cannot mint an invoice without a
- * conversion quote, and it reports its amounts in a different field than a
- * bitcoin wallet does, so getting it wrong produces confidently wrong numbers
- * rather than an error.
+ * Normally the wallet is asked (see lib/wallet-profile.ts) — this exists for
+ * deployments whose API key cannot read wallets, and there is deliberately no
+ * default. Defaulting to "btc" is what turns a USD wallet into "10 sats"
+ * instead of "$100.00", silently and with no error anywhere.
  */
-export function walletCurrency(): WalletCurrency {
-  const raw = process.env.VOLTAGE_CURRENCY ?? "btc";
+export function optionalCurrency(): WalletCurrency | undefined {
+  const raw = process.env.VOLTAGE_CURRENCY;
+  if (!raw) return undefined;
   if (raw !== "btc" && raw !== "usd") {
     throw new Error(`VOLTAGE_CURRENCY must be "btc" or "usd", got: ${raw}`);
   }
   return raw;
 }
 
-/**
- * Extra configuration a USD wallet needs, because every receive has to be
- * quoted first. Required only in USD mode, so a bitcoin deployment never has
- * to know these exist.
- */
-export function quoteConfig() {
-  const network = required("VOLTAGE_NETWORK");
-  const allowed = ["mainnet", "testnet", "signet", "mutinynet", "none"];
-  if (!allowed.includes(network)) {
-    throw new Error(`VOLTAGE_NETWORK must be one of ${allowed.join(", ")}, got: ${network}`);
+const NETWORKS = ["mainnet", "testnet", "signet", "mutinynet", "none"];
+
+export function optionalNetwork(): string | undefined {
+  const raw = process.env.VOLTAGE_NETWORK;
+  if (!raw) return undefined;
+  if (!NETWORKS.includes(raw)) {
+    throw new Error(`VOLTAGE_NETWORK must be one of ${NETWORKS.join(", ")}, got: ${raw}`);
   }
-  return { lineOfCreditId: required("VOLTAGE_LINE_OF_CREDIT_ID"), network };
+  return raw;
 }
 
 /** Present only when the autopay demo helper is configured. */
@@ -105,13 +103,12 @@ function requiredInteger(name: string): number {
  * indistinguishable from a real policy on screen: you end up debugging the
  * wrong system. Better to refuse to serve than to invent a number.
  */
-export function policyConfig() {
+export function policyConfig(currency: WalletCurrency) {
   const raw = process.env.LIMIT_WINDOW ?? "utc_day";
   if (raw !== "utc_day" && raw !== "rolling") {
     throw new Error(`LIMIT_WINDOW must be "utc_day" or "rolling", got: ${raw}`);
   }
 
-  const currency = walletCurrency();
   const [fallbackMin, fallbackMax] =
     currency === "usd" ? [100, 5_000] : [100_000, 5_000_000];
 

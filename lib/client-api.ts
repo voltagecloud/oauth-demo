@@ -48,6 +48,9 @@ export interface LimitsResponse {
   deposits: DepositRow[];
   bounds: { min: number; max: number };
   currency: WalletCurrency;
+  /** Where the currency came from: detected from the wallet, or overridden. */
+  currencySource: "wallet" | "env" | "mixed";
+  network: string;
   /** Deposit button denominations, in base units, chosen server-side. */
   presets: number[];
   walletPolicy: WalletPolicyView | null;
