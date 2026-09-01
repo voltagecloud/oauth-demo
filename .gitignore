@@ -8,3 +8,6 @@ build/
 *.tsbuildinfo
 next-env.d.ts
 .DS_Store
+
+# Claude Code scratch worktrees
+.claude/worktrees/
