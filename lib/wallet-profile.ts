@@ -1,5 +1,6 @@
 import { optionalCurrency, optionalNetwork, voltageConfig } from "@/lib/env";
 import type { WalletCurrency } from "@/lib/money";
+import { getLineOfCredit } from "@/lib/voltage/lines-of-credit";
 import { getWallet } from "@/lib/voltage/wallets";
 
 /**
@@ -14,6 +15,11 @@ import { getWallet } from "@/lib/voltage/wallets";
  *
  * So this is read from the API, and the environment variables are left as
  * overrides for the cases detection cannot cover.
+ *
+ * The currency comes from the wallet's **line of credit**, which carries a
+ * required `currency` from the moment it is created. The wallet's own
+ * `balances` array is only a fallback: it is empty on a wallet nothing has
+ * been paid into yet, which is exactly the state a fresh demo wallet is in.
  */
 export interface WalletProfile {
   currency: WalletCurrency;
@@ -37,6 +43,11 @@ export function clearWalletProfileCache(): void {
   cache = null;
 }
 
+function asCurrency(value: string | undefined): WalletCurrency | undefined {
+  const lower = value?.toLowerCase();
+  return lower === "usd" || lower === "btc" ? lower : undefined;
+}
+
 export async function walletProfile(): Promise<WalletProfile> {
   if (cache && cache.expiresAt > Date.now()) return cache.profile;
 
@@ -48,22 +59,23 @@ export async function walletProfile(): Promise<WalletProfile> {
   let detected: Partial<WalletProfile> = {};
   try {
     const wallet = await getWallet(walletId);
-    // A wallet carries one balance per currency it holds. In practice that is
-    // one; if a wallet ever reports several, an explicit override is the only
-    // honest way to choose, so prefer usd only when it is the sole entry.
-    const currencies = new Set(wallet.balances?.map((b) => b.currency) ?? []);
-    const currency: WalletCurrency | undefined =
-      currencies.size === 1 && currencies.has("usd")
-        ? "usd"
-        : currencies.has("btc")
-          ? "btc"
-          : undefined;
+    const lineOfCreditId = wallet.line_of_credit_id ?? undefined;
 
-    detected = {
-      currency,
-      network: wallet.network,
-      lineOfCreditId: wallet.line_of_credit_id ?? undefined,
-    };
+    detected = { network: wallet.network, lineOfCreditId };
+
+    // Preferred: the line of credit. Its currency is required and present from
+    // creation, so this works on a wallet that has never been paid into.
+    if (lineOfCreditId) {
+      const line = await getLineOfCredit(lineOfCreditId);
+      detected.currency = asCurrency(line.currency);
+    }
+
+    // Fallback for a wallet with no line of credit. `balances` is empty until
+    // money has moved, so this can legitimately find nothing.
+    if (!detected.currency) {
+      const currencies = new Set(wallet.balances?.map((b) => b.currency) ?? []);
+      detected.currency = currencies.has("usd") && !currencies.has("btc") ? "usd" : currencies.has("btc") ? "btc" : undefined;
+    }
   } catch (error) {
     // The key may lack wallet read scope. That is survivable *if* the operator
     // has configured the values by hand; otherwise it is fatal and saying so
@@ -80,7 +92,8 @@ export async function walletProfile(): Promise<WalletProfile> {
   const currency = currencyOverride ?? detected.currency;
   if (!currency) {
     throw new Error(
-      `Wallet ${walletId} reported no btc or usd balance, so its currency is unknown. Set VOLTAGE_CURRENCY explicitly.`,
+      `Could not determine the currency of wallet ${walletId}: it has no line of credit ` +
+        `and no balances to infer from. Set VOLTAGE_CURRENCY to "btc" or "usd".`,
     );
   }
 

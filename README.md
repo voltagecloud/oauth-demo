@@ -68,12 +68,17 @@ currency and takes the field that agrees.
 None of this applies to a bitcoin wallet: the quote step is skipped and the invoice
 is minted directly.
 
-**You do not configure any of it.** The wallet's currency, network and line of credit
-all come from `GET /organizations/{org}/wallets/{id}` — `balances[].currency` says
-what it holds — so the app asks rather than making you restate it
-(`lib/wallet-profile.ts`, cached for five minutes). `VOLTAGE_CURRENCY`,
-`VOLTAGE_NETWORK` and `VOLTAGE_LINE_OF_CREDIT_ID` remain as overrides for a key that
-cannot read wallets.
+**You do not configure any of it.** `GET /wallets/{id}` gives the network and the
+line of credit, and `GET /lines_of_credit/{id}/summary` gives the currency — so the
+app asks rather than making you restate it (`lib/wallet-profile.ts`, cached for five
+minutes). `VOLTAGE_CURRENCY`, `VOLTAGE_NETWORK` and `VOLTAGE_LINE_OF_CREDIT_ID`
+remain as overrides for a key that cannot read wallets.
+
+The currency comes from the **line of credit**, not the wallet's `balances` array.
+A line of credit carries a required `currency` from the moment it exists; `balances`
+is `[]` until money has actually moved through the wallet — which is precisely the
+state a freshly created demo wallet is in. Balances are only a fallback, for a wallet
+with no line of credit at all.
 
 That is not just convenience. A currency the operator has to restate is a currency
 they can get wrong, and getting it wrong is silent: a USD wallet read as bitcoin
